@@ -1,28 +1,45 @@
-import streamlit as st
 import yfinance as yf
-import pandas_ta as ta
-import plotly.graph_objects as go
+import pandas as pd
 
-# Scanchart AI सेटअप
-st.set_page_config(page_title="Scanchart AI", layout="wide")
-st.title("📊 Scanchart AI - Live Dashboard")
+# जिन स्टॉक्स को चेक करना है उनके नाम (उदाहरण के लिए NSE के कुछ स्टॉक)
+stocks = ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'TATAMOTORS.NS']
 
-# साइडबार
-symbol = st.sidebar.text_input("स्टॉक सिंबल (जैसे: RELIANCE.NS)", "TCS.NS")
-t_frame = st.sidebar.selectbox("टाइमफ्रेम", ["1d", "1h", "15m", "5m"])
-
-if symbol:
+def check_stock_growth(ticker_symbol):
     try:
-        df = yf.download(symbol, period="1mo", interval=t_frame)
-        if not df.empty:
-            df['EMA20'] = ta.ema(df['Close'], length=20)
-            fig = go.Figure(data=[go.Candlestick(x=df.index, open=df['Open'], 
-                            high=df['High'], low=df['Low'], close=df['Close'])])
-            fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], name="EMA 20"))
-            st.plotly_chart(fig, use_container_width=True)
-            st.success(f"{symbol} डेटा लोड हो गया!")
-        else:
-            st.error("डेटा नहीं मिला।")
-    except Exception as e:
-        st.error(f"Error: {e}")
+        stock = yf.Ticker(ticker_symbol)
+        # पिछले 4 साल का फाइनेंशियल डेटा लेना
+        financials = stock.financials # Profit & Loss account
+        
+        # 1. EPS (Earnings Per Share) निकालना
+        eps = financials.loc['Basic EPS']
+        
+        # 2. OPM और NPM के लिए Revenue और Net Income लेना
+        rev = financials.loc['Total Revenue']
+        net_inc = financials.loc['Net Income Continuous Operations']
+        op_inc = financials.loc['Operating Income']
+        
+        # मार्जिन कैलकुलेट करना
+        opm = (op_inc / rev) * 100
+        npm = (net_inc / rev) * 100
 
+        # पिछले 3 साल का डेटा (2024, 2023, 2022) - डेटा उपलब्धता के अनुसार
+        # चेक करना कि क्या हर साल बढ़ रहा है
+        is_eps_growing = eps.iloc[0] > eps.iloc[1] > eps.iloc[2]
+        is_opm_growing = opm.iloc[0] > opm.iloc[1] > opm.iloc[2]
+        is_npm_growing = npm.iloc[0] > npm.iloc[1] > npm.iloc[2]
+
+        if is_eps_growing and is_opm_growing and is_npm_growing:
+            return True
+        return False
+    except:
+        return False
+
+print("फिल्टर किए जा रहे स्टॉक्स... कृपया प्रतीक्षा करें...")
+growing_stocks = [s for s in stocks if check_stock_growth(s)]
+
+print("\n--- वो शेयर्स जिनका OPM, NPM और EPS हर साल बढ़ रहा है ---")
+if growing_stocks:
+    for s in growing_stocks:
+        print(f"✅ {s}")
+else:
+    print("कोई स्टॉक मैच नहीं हुआ।")
